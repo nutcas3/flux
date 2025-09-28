@@ -1,3 +1,3 @@
-module host-worker-node
+module flux-worker-go
 
 go 1.24.3
