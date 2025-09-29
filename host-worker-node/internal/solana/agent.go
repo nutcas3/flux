@@ -163,5 +163,15 @@ func (a *Agent) UpdateResourceStatus(status types.ResourceStatus) error {
 	return nil
 }
 
+// SubmitJobResult submits job result hash to the blockchain
+func (a *Agent) SubmitJobResult(jobID string, resultHash [32]byte) error {
+	// This function would use the 'submit_job_result' instruction.
+	// It submits the proof-of-work hash after job completion.
+	
+	// MOCK IMPLEMENTATION: Simulate success.
+	log.Printf("Submitting job result for JobID=%s, Hash=%x... (MOCK OK)", jobID, resultHash[:8])
+	return nil
+}
+
 // --- Future Functions ---
 // func (a *Agent) SubmitProofOfComputation(proof types.Proof) error {...}

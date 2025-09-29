@@ -7,13 +7,25 @@ A comprehensive DePIN (Decentralized Physical Infrastructure Network) system for
 The Flux Marketplace consists of three main components working together to create a decentralized compute marketplace:
 
 ### 1. On-Chain Contracts (`on-chain-contracts/`)
-**Technology**: Rust + Anchor Framework
+**Technology**: Rust + Pinocchio Framework
 **Blockchain**: Solana
 
 - **Resource Registry**: Smart contracts for registering and managing compute resources
-- **Account Management**: PDA-based resource accounts with unique identifiers
-- **Status Tracking**: Real-time resource availability and reputation scoring
-- **Future Extensions**: Job escrow, slashing mechanisms, and governance
+- **Job Lifecycle**: Complete job management from submission to completion
+- **Escrow System**: Secure payment handling with locked funds
+- **Staking Mechanism**: FLUX token staking for host reputation
+- **Status Tracking**: Real-time resource availability (Idle, Busy, Offline)
+
+**Core Instructions**:
+- `register_resource` - Register new compute resources
+- `update_resource_status` - Update resource availability
+- `start_job` - Initialize job with escrow
+- `submit_job_result` - Submit job completion proof
+- `resolve_job` - Finalize job and release payment
+- `deposit_escrow` - Lock client funds
+- `release_payment` - Transfer funds to host
+- `stake_flux` - Stake tokens for reputation
+- `unstake_flux` - Withdraw staked tokens
 
 ### 2. Host Worker Node (`host-worker-node/`)
 **Technology**: Go
@@ -21,24 +33,27 @@ The Flux Marketplace consists of three main components working together to creat
 
 - **Hardware Detection**: Automatic GPU/CPU specification scanning
 - **Blockchain Integration**: Solana RPC client for on-chain operations
-- **Status Heartbeat**: Regular status updates to maintain resource availability
+- **Status Heartbeat**: Regular status updates (Idle/Busy/Offline)
 - **Job Execution**: Containerized workload execution (Docker)
+- **Resource Management**: Dynamic status updates based on job state
 
 ### 3. Marketplace Orchestration (`marketplace-orchestration/`)
 **Technology**: TypeScript/Node.js
 **Purpose**: Job matching and coordination
 
 - **Dynamic Matching**: Intelligent host selection based on requirements
+- **Oracle Integration**: Real-time benchmark data for reputation scoring
 - **Resource Discovery**: Real-time querying of available compute resources
 - **Job Dispatching**: Secure job assignment and monitoring
-- **Escrow Management**: Payment coordination and dispute resolution
+- **Escrow Management**: Payment coordination via on-chain contracts
+- **Reputation System**: Oracle-backed scoring and updates
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - Go 1.20+
-- Rust & Anchor Framework
+- Rust & Cargo
 - Solana CLI tools
 - Docker (for containerized workloads)
 
@@ -51,8 +66,8 @@ cd flux-marketplace
 ### 2. Build On-Chain Contracts
 ```bash
 cd on-chain-contracts/programs/on-chain-contracts
-anchor build
-anchor deploy
+cargo build-sbf
+solana program deploy target/deploy/on_chain_contracts.so
 ```
 
 ### 3. Start Host Worker Node
@@ -76,6 +91,16 @@ flux-marketplace/
 ├── on-chain-contracts/          # Solana smart contracts
 │   └── programs/on-chain-contracts/src/
 │       ├── lib.rs              # Main contract logic
+│       ├── instructions/       # Contract instructions
+│       │   ├── register_resource.rs
+│       │   ├── start_job.rs
+│       │   ├── deposit_escrow.rs
+│       │   ├── stake_flux.rs
+│       │   └── ...
+│       ├── state/              # Data structures
+│       │   ├── resource.rs     # ResourceAccount, ResourceSpecs, ResourceStatus
+│       │   ├── job.rs          # JobAccount, JobStatus
+│       │   └── escrow.rs       # EscrowAccount, EscrowStatus
 │       └── Cargo.toml          # Rust dependencies
 ├── host-worker-node/            # Go worker implementation
 │   ├── main.go                 # Application entry point
@@ -83,12 +108,20 @@ flux-marketplace/
 │   └── internal/
 │       ├── hardware/           # Hardware detection
 │       ├── solana/             # Blockchain client
-│       └── types/              # Shared data types
+│       ├── types/              # Shared data types (matches Rust)
+│       ├── api/                # HTTP API listener
+│       └── jobprocessor/       # Docker job execution
 └── marketplace-orchestration/   # TypeScript orchestrator
     └── src/
         ├── index.ts            # Main application
         ├── services/           # External service integrations
-        └── match_engine/       # Job matching algorithms
+        │   └── SolanaRpcService.ts
+        ├── match_engine/       # Job matching algorithms
+        │   ├── DynamicMatcher.ts
+        │   └── MatchQueue.ts
+        └── reputation_system/  # Oracle-based reputation
+            ├── OracleFeed.ts
+            └── ScorerUpdater.ts
 ```
 
 ## 🔧 Development
@@ -96,8 +129,9 @@ flux-marketplace/
 ### On-Chain Development
 ```bash
 cd on-chain-contracts/programs/on-chain-contracts
-anchor test
-anchor deploy --provider.cluster devnet
+cargo check
+cargo test
+solana program deploy --program-id <PROGRAM_ID> target/deploy/on_chain_contracts.so
 ```
 
 ### Host Worker Development
@@ -121,27 +155,38 @@ npm test
 - Unique resource identification via PDAs
 - Reputation-based scoring system
 - Price discovery mechanism
+- Status tracking: Idle, Busy, Offline
 
 ### Dynamic Matching
 - Multi-criteria optimization
 - Real-time availability checking
 - Reputation-weighted selection
 - Price-performance balancing
+- Oracle-backed benchmark data
 
 ### Job Lifecycle
 1. **Submission**: Client submits job requirements
 2. **Matching**: Orchestrator finds optimal host
-3. **Escrow**: Funds locked on-chain
-4. **Execution**: Job dispatched to worker
-5. **Verification**: Proof-of-work validation
-6. **Settlement**: Payment release and reputation update
+3. **Escrow**: Funds locked on-chain via `deposit_escrow`
+4. **Job Start**: Job initialized with `start_job` instruction
+5. **Execution**: Job dispatched to worker node
+6. **Result Submission**: Host submits proof via `submit_job_result`
+7. **Resolution**: Job finalized with `resolve_job`
+8. **Settlement**: Payment released via `release_payment`
+
+### Staking System
+- Hosts stake FLUX tokens for reputation
+- Staking increases trust score
+- Unstaking available after cooldown
+- Slashing for malicious behavior (future)
 
 ## 🔒 Security Considerations
 
 - **Key Management**: Secure wallet key storage
 - **Transaction Signing**: Hardware security modules recommended
 - **Access Control**: PDA-based authorization
-- **Slashing Protection**: Reputation and stake-based penalties
+- **Escrow Protection**: Funds locked until job completion
+- **Reputation System**: Stake-based penalties for bad actors
 - **Audit Trail**: Complete on-chain transaction history
 
 ## 🌐 Network Configuration
@@ -162,6 +207,7 @@ npm test
 - Resource utilization
 - Job completion rates
 - Reputation scores
+- Staked FLUX amount
 - Earnings analytics
 
 ### Network Health
@@ -169,6 +215,35 @@ npm test
 - Active job count
 - Network throughput
 - Geographic distribution
+- Total value locked (TVL)
+
+## 🔄 Data Type Alignment
+
+All components use matching data structures:
+
+**ResourceStatus** (3 states):
+- `Idle` (0) - Available for jobs
+- `Busy` (1) - Currently executing job
+- `Offline` (2) - Not available
+
+**ResourceSpecs**:
+- `id`: u64
+- `gpu_model`: String
+- `vram_gb`: u8
+- `cpu_cores`: u8
+- `compute_rating`: u32
+- `price_per_hour`: u64
+
+**JobStatus**:
+- `Pending` - Awaiting host assignment
+- `Active` - In progress
+- `Completed` - Successfully finished
+- `Failed` - Failed or disputed
+
+**EscrowStatus**:
+- `Locked` - Funds held
+- `Released` - Paid to host
+- `Refunded` - Returned to client
 
 ## 🤝 Contributing
 
@@ -183,6 +258,7 @@ npm test
 - Add unit tests for new functionality
 - Update documentation
 - Test on devnet before mainnet
+- Ensure data type alignment across all components
 
 ## 📄 License
 
