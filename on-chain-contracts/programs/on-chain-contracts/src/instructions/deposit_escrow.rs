@@ -1,6 +1,8 @@
 use pinocchio::{
     account_info::AccountInfo,
+    instruction::{AccountMeta, Instruction},
     msg,
+    program::invoke,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
@@ -8,7 +10,8 @@ use pinocchio::{
 
 use crate::state;
 
-/// Deposits FLUX tokens into escrow for a job.
+const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
 pub fn deposit_escrow(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let client = &accounts[0];
     let escrow_account = &accounts[1];
@@ -22,15 +25,41 @@ pub fn deposit_escrow(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
     let job_id = u64::from_le_bytes(data[8..16].try_into().unwrap());
 
-    // Simplified: Assume token transfer to escrow
-    // In reality, use SPL Token CPI for transfer
-    msg!("Depositing {} FLUX to escrow for job {}", amount, job_id);
+    let (escrow_pda, bump) = Pubkey::create_program_address(
+        &[b"escrow", client.key.as_ref(), job_id.to_le_bytes().as_ref()],
+        &pinocchio::ID,
+    )?;
 
-    // Initialize escrow data
+    if escrow_account.key != &escrow_pda {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let transfer_ix = spl_token::instruction::transfer(
+        &SPL_TOKEN_PROGRAM_ID,
+        token_account.key,
+        &escrow_pda,
+        client.key,
+        &[],
+        amount,
+    )?;
+
+    let transfer_instruction = Instruction {
+        program_id: *token_program.key,
+        accounts: vec![
+            AccountMeta::new(*token_account.key, false),
+            AccountMeta::new(escrow_pda, false),
+            AccountMeta::new(*client.key, true),
+        ],
+        data: transfer_ix.data,
+    };
+
+    invoke(&transfer_instruction, accounts)?;
+
+    msg!("Deposited {} FLUX to escrow for job {}", amount, job_id);
     let mut escrow_data = state::EscrowAccount {
         job_id,
         client: *client.key,
-        host: Pubkey::default(), // To be set later
+        host: Pubkey::default(),
         amount,
         status: state::EscrowStatus::Locked,
     };
