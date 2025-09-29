@@ -61,11 +61,58 @@ pub enum JobStatus {
     Failed,    // Failed or disputed
 }
 
-// Extend error codes for jobs
+// Escrow and Payment structures
+#[derive(BorshSerialize, BorshDeserialize, Clone)]
+pub struct EscrowAccount {
+    pub job_id: u64,
+    pub client: Pubkey,
+    pub host: Pubkey,
+    pub amount: u64, // FLUX tokens held
+    pub status: EscrowStatus,
+}
+
+impl EscrowAccount {
+    pub const SPACE: usize = 8 + 32 + 32 + 8 + 1;
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
+pub enum EscrowStatus {
+    Locked,    // Funds held until job completion
+    Released,  // Funds transferred to host
+    Refunded,  // Funds returned to client
+}
+
+// Governance structures
+#[derive(BorshSerialize, BorshDeserialize, Clone)]
+pub struct ProposalAccount {
+    pub proposal_id: u64,
+    pub proposer: Pubkey,
+    pub description: String,
+    pub votes_for: u64,
+    pub votes_against: u64,
+    pub status: ProposalStatus,
+    pub deadline: i64,
+}
+
+impl ProposalAccount {
+    pub const SPACE: usize = 8 + 32 + (4 + 100) + 8 + 8 + 1 + 8; // Approximate for string
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
+pub enum ProposalStatus {
+    Active,
+    Passed,
+    Rejected,
+}
+
+// Extended error codes
 pub enum FluxError {
     ResourceIdAlreadyExists,
     InvalidPrice,
     JobNotFound,
     UnauthorizedHost,
     InvalidJobStatus,
+    InsufficientFunds,
+    EscrowNotLocked,
+    ProposalNotActive,
 }
