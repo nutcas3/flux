@@ -17,7 +17,6 @@ const (
     Idle ResourceStatus = iota // 0
     Busy                       // 1
     Offline                    // 2
-    Suspended                  // 3
 )
 
 // StatusToString converts the enum value to a readable string for logging.
@@ -29,8 +28,6 @@ func StatusToString(status ResourceStatus) string {
         return "Busy"
     case Offline:
         return "Offline"
-    case Suspended:
-        return "Suspended"
     default:
         return "Unknown"
     }
