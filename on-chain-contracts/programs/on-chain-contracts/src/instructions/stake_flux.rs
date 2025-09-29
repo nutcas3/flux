@@ -55,7 +55,7 @@ pub fn stake_flux(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
 
     invoke(&transfer_instruction, accounts)?;
 
-    msg!("Staked {} FLUX for host {}", amount, host.key);
+    msg!("Staking FLUX for host");
     let mut resource_data_mut = resource_account.try_borrow_mut_data()?;
     let mut resource_mut = state::ResourceAccount::try_from_slice(&resource_data_mut)?;
     resource_mut.staked_flux += amount;

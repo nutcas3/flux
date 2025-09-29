@@ -29,10 +29,8 @@ pub fn process_instruction(accounts: &[AccountInfo], data: &[u8]) -> ProgramResu
         4 => instructions::resolve_job(accounts, rest),
         5 => instructions::deposit_escrow(accounts, rest),
         6 => instructions::release_payment(accounts, rest),
-        7 => instructions::create_proposal(accounts, rest),
-        8 => instructions::vote_on_proposal(accounts, rest),
-        9 => instructions::stake_flux(accounts, rest), // New staking instruction
-        10 => instructions::unstake_flux(accounts, rest), // New unstaking instruction
+        7 => instructions::stake_flux(accounts, rest), 
+        8 => instructions::unstake_flux(accounts, rest), 
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
