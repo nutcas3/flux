@@ -2,6 +2,7 @@ package hardware
 
 import (
 	"log"
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 // detectNVIDIAGPUNVML detects NVIDIA GPU using NVML bindings
