@@ -3,6 +3,7 @@ use pinocchio::{
     declare_id,
     entrypoint,
     instruction::{AccountMeta, Instruction},
+    msg,
     program::invoke_signed,
     program_error::ProgramError,
     pubkey::{self, Pubkey},
@@ -24,6 +25,13 @@ pub fn process_instruction(accounts: &[AccountInfo], data: &[u8]) -> ProgramResu
     match instruction {
         0 => register_resource(accounts, rest),
         1 => update_resource_status(accounts, rest),
+        2 => start_job(accounts, rest),
+        3 => submit_job_result(accounts, rest),
+        4 => resolve_job(accounts, rest),
+        5 => deposit_escrow(accounts, rest),
+        6 => release_payment(accounts, rest),
+        7 => create_proposal(accounts, rest),
+        8 => vote_on_proposal(accounts, rest),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
@@ -124,6 +132,246 @@ pub fn update_resource_status(accounts: &[AccountInfo], data: &[u8]) -> ProgramR
     resource_mut.status = new_status;
     resource_mut.last_updated = 0; // Placeholder
     account_data_mut.copy_from_slice(&resource_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Starts a new job and assigns it to an available host.
+/// Accounts: [client, job_account, resource_account, escrow_account, system_program]
+pub fn start_job(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let client = &accounts[0];
+    let job_account = &accounts[1];
+    let resource_account = &accounts[2];
+    let escrow_account = &accounts[3];
+    let system_program = &accounts[4];
+
+    // Deserialize job details from data
+    let job_id = u64::from_le_bytes(data[0..8].try_into().unwrap());
+    let specs = state::ResourceSpecs::try_from_slice(&data[8..])?;
+
+    if !client.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Check if resource is available
+    let resource_data = resource_account.try_borrow_data()?;
+    let resource = state::ResourceAccount::try_from_slice(&resource_data)?;
+    if resource.status != state::ResourceStatus::Idle {
+        return Err(ProgramError::Custom(4)); // Resource not available
+    }
+
+    // Create job account (simplified)
+    // In a full implementation, handle PDA and creation
+
+    // Initialize job data
+    let mut job_data = state::JobAccount {
+        job_id,
+        client: *client.key,
+        host: *resource.host.key(),
+        status: state::JobStatus::Active,
+        specs,
+        result_hash: [0; 32],
+        deadline: 0, // Placeholder
+        payment_amount: specs.price_per_hour, // Simplified
+        escrow_account: *escrow_account.key,
+    };
+
+    let mut account_data = job_account.try_borrow_mut_data()?;
+    account_data.copy_from_slice(&job_data.try_to_vec()?);
+
+    // Update resource status to Busy
+    let mut resource_data_mut = resource_account.try_borrow_mut_data()?;
+    let mut resource_mut = state::ResourceAccount::try_from_slice(&resource_data_mut)?;
+    resource_mut.status = state::ResourceStatus::Busy;
+    resource_data_mut.copy_from_slice(&resource_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Submits the result of a job by the host.
+/// Accounts: [host, job_account]
+pub fn submit_job_result(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let host = &accounts[0];
+    let job_account = &accounts[1];
+
+    if !host.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Deserialize result hash
+    let result_hash: [u8; 32] = data.try_into().unwrap();
+
+    let account_data = job_account.try_borrow_data()?;
+    let job = state::JobAccount::try_from_slice(&account_data)?;
+    if job.host != *host.key {
+        return Err(ProgramError::Custom(3)); // UnauthorizedHost
+    }
+
+    // Update job with result
+    let mut account_data_mut = job_account.try_borrow_mut_data()?;
+    let mut job_mut = state::JobAccount::try_from_slice(&account_data_mut)?;
+    job_mut.result_hash = result_hash;
+    job_mut.status = state::JobStatus::Completed;
+    account_data_mut.copy_from_slice(&job_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Resolves a job, handling payment and reputation updates.
+/// Accounts: [client, host, job_account, escrow_account]
+pub fn resolve_job(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let client = &accounts[0];
+    let host = &accounts[1];
+    let job_account = &accounts[2];
+    let escrow_account = &accounts[3];
+
+    if !client.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let account_data = job_account.try_borrow_data()?;
+    let job = state::JobAccount::try_from_slice(&account_data)?;
+    if job.client != *client.key {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Simplified: Assume job is resolved successfully
+    // Release payment, update reputation, etc.
+
+    let mut job_data_mut = job_account.try_borrow_mut_data()?;
+    let mut job_mut = state::JobAccount::try_from_slice(&job_data_mut)?;
+    job_mut.status = state::JobStatus::Completed;
+    job_data_mut.copy_from_slice(&job_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Deposits FLUX tokens into escrow for a job.
+/// Accounts: [client, escrow_account, token_account, token_program]
+pub fn deposit_escrow(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let client = &accounts[0];
+    let escrow_account = &accounts[1];
+    let token_account = &accounts[2];
+    let token_program = &accounts[3];
+
+    if !client.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
+    let job_id = u64::from_le_bytes(data[8..16].try_into().unwrap());
+
+    // Simplified: Assume token transfer to escrow
+    // In reality, use SPL Token CPI for transfer
+    msg!("Depositing {} FLUX to escrow for job {}", amount, job_id);
+
+    // Initialize escrow data
+    let mut escrow_data = state::EscrowAccount {
+        job_id,
+        client: *client.key,
+        host: Pubkey::default(), // To be set later
+        amount,
+        status: state::EscrowStatus::Locked,
+    };
+
+    let mut account_data = escrow_account.try_borrow_mut_data()?;
+    account_data.copy_from_slice(&escrow_data.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Releases payment from escrow to the host.
+/// Accounts: [client, host, escrow_account, token_account, token_program]
+pub fn release_payment(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let client = &accounts[0];
+    let host = &accounts[1];
+    let escrow_account = &accounts[2];
+    let token_account = &accounts[3];
+    let token_program = &accounts[4];
+
+    if !client.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let escrow_data = escrow_account.try_borrow_data()?;
+    let escrow = state::EscrowAccount::try_from_slice(&escrow_data)?;
+    if escrow.status != state::EscrowStatus::Locked {
+        return Err(ProgramError::Custom(6)); // EscrowNotLocked
+    }
+
+    // Simplified: Transfer tokens to host
+    msg!("Releasing {} FLUX to host {}", escrow.amount, host.key);
+
+    // Update escrow status
+    let mut escrow_data_mut = escrow_account.try_borrow_mut_data()?;
+    let mut escrow_mut = state::EscrowAccount::try_from_slice(&escrow_data_mut)?;
+    escrow_mut.status = state::EscrowStatus::Released;
+    escrow_data_mut.copy_from_slice(&escrow_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Creates a new governance proposal.
+/// Accounts: [proposer, proposal_account, system_program]
+pub fn create_proposal(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let proposer = &accounts[0];
+    let proposal_account = &accounts[1];
+    let system_program = &accounts[2];
+
+    if !proposer.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let proposal_id = u64::from_le_bytes(data[0..8].try_into().unwrap());
+    let description = String::from_utf8(data[8..].to_vec()).unwrap_or_default();
+
+    // Initialize proposal
+    let mut proposal_data = state::ProposalAccount {
+        proposal_id,
+        proposer: *proposer.key,
+        description,
+        votes_for: 0,
+        votes_against: 0,
+        status: state::ProposalStatus::Active,
+        deadline: 0, // Set based on time
+    };
+
+    let mut account_data = proposal_account.try_borrow_mut_data()?;
+    account_data.copy_from_slice(&proposal_data.try_to_vec()?);
+
+    msg!("Proposal {} created by {}", proposal_id, proposer.key);
+
+    Ok(())
+}
+
+/// Votes on a governance proposal.
+/// Accounts: [voter, proposal_account]
+pub fn vote_on_proposal(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let voter = &accounts[0];
+    let proposal_account = &accounts[1];
+
+    if !voter.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let vote = data[0] != 0; // true for yes, false for no
+    let proposal_data = proposal_account.try_borrow_data()?;
+    let proposal = state::ProposalAccount::try_from_slice(&proposal_data)?;
+    if proposal.status != state::ProposalStatus::Active {
+        return Err(ProgramError::Custom(7)); // ProposalNotActive
+    }
+
+    // Update votes
+    let mut proposal_data_mut = proposal_account.try_borrow_mut_data()?;
+    let mut proposal_mut = state::ProposalAccount::try_from_slice(&proposal_data_mut)?;
+    if vote {
+        proposal_mut.votes_for += 1;
+    } else {
+        proposal_mut.votes_against += 1;
+    }
+    proposal_data_mut.copy_from_slice(&proposal_mut.try_to_vec()?);
+
+    msg!("Vote cast by {} on proposal {}", voter.key, proposal.proposal_id);
 
     Ok(())
 }
