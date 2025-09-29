@@ -1,126 +1,130 @@
-use anchor_lang::prelude::*;
+use pinocchio::{
+    account_info::AccountInfo,
+    declare_id,
+    entrypoint,
+    instruction::{AccountMeta, Instruction},
+    program::invoke_signed,
+    program_error::ProgramError,
+    pubkey::{self, Pubkey},
+    system_instruction,
+    ProgramResult,
+};
+use borsh::{BorshDeserialize, BorshSerialize};
 
 declare_id!("C9xzMFbaR39ftisYXsnbELsPpxgsMeeLW5fVH4fSVNiR");
 
-/// The Flux Compute Marketplace Core Program
-#[program]
-pub mod flux_marketplace {
-    use super::*;
+pub mod state;
 
-    /// Registers a new hardware resource account for a Host.
-    pub fn register_resource(ctx: Context<RegisterResource>, specs: ResourceSpecs) -> Result<()> {
-        require!(specs.price_per_hour > 0, FluxError::InvalidPrice);
 
-        let resource_account = &mut ctx.accounts.resource_account;
-        resource_account.host = ctx.accounts.host.key();
-        resource_account.status = ResourceStatus::Idle;
-        resource_account.specs = specs;
-        resource_account.reputation_score = 1000; // Starting score
-        resource_account.staked_flux = 0;
-        resource_account.last_updated = Clock::get()?.unix_timestamp;
-        msg!("Resource Registered by Host: {}", ctx.accounts.host.key());
-        Ok(())
+// Pinocchio entrypoint
+entrypoint!(process_instruction);
+
+pub fn process_instruction(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let (instruction, rest) = data.split_first().ok_or(ProgramError::InvalidInstructionData)?;
+    match instruction {
+        0 => register_resource(accounts, rest),
+        1 => update_resource_status(accounts, rest),
+        _ => Err(ProgramError::InvalidInstructionData),
+    }
+}
+
+/// Registers a new hardware resource account for a Host.
+pub fn register_resource(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let host = &accounts[0];
+    let resource_account = &accounts[1];
+    let system_program = &accounts[2];
+
+    // Deserialize specs from data
+    let specs = state::ResourceSpecs::try_from_slice(data)?;
+
+    if specs.price_per_hour == 0 {
+        return Err(ProgramError::Custom(1)); // InvalidPrice
     }
 
-    /// Updates the specs and status of an existing resource, mainly used by the Host Worker Node.
-    pub fn update_resource_status(ctx: Context<UpdateResource>, new_status: ResourceStatus) -> Result<()> {
-        let resource_account = &mut ctx.accounts.resource_account;
-        // Authority check is automatically handled by the Anchor Context constraints.
-        resource_account.status = new_status;
-        resource_account.last_updated = Clock::get()?.unix_timestamp;
-        msg!("Resource Status updated to: {:?}", new_status);
-        Ok(())
+    // Manual authority check: ensure host is signer
+    if !host.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // --- FUTURE FUNCTIONS (Placeholder for full system) ---
-    // pub fn start_job(ctx: Context<StartJob>, job_id: u64, price_lamports: u64) -> Result<()> {...} // Used by JobEscrow
-    // pub fn resolve_job(ctx: Context<ResolveJob>, job_result_hash: [u8; 32]) -> Result<()> {...} // Used by JobEscrow
-    // pub fn slash_host(ctx: Context<SlashHost>, amount: u64) -> Result<()> {...} // Used by Governance/Verification
+    // Calculate PDA for the resource account
+    let (resource_pda, bump) = Pubkey::create_program_address(
+        &[b"resource", host.key.as_ref(), specs.id.to_le_bytes().as_ref()],
+        &pinocchio::ID,
+    )?;
+
+    // Ensure the resource_account matches the PDA
+    if resource_account.key != &resource_pda {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Create the account using system_instruction
+    let create_account_ix = system_instruction::create_account(
+        host.key,
+        resource_account.key,
+        1000000, // Rent-exempt lamports (adjust as needed)
+        state::ResourceAccount::SPACE as u64,
+        &pinocchio::ID,
+    );
+
+    let create_account_instruction = Instruction {
+        program_id: system_program.key,
+        accounts: vec![
+            AccountMeta::new(*host.key, true),
+            AccountMeta::new(*resource_account.key, false),
+            AccountMeta::new(*system_program.key, false),
+        ],
+        data: create_account_ix.data,
+    };
+
+    // Invoke the create_account instruction, signing with PDA
+    invoke_signed(
+        &create_account_instruction,
+        accounts,
+        &[&[b"resource", host.key.as_ref(), specs.id.to_le_bytes().as_ref(), &[bump]]],
+    )?;
+
+    // Now initialize the account data
+    let mut account_data = resource_account.try_borrow_mut_data()?;
+    let mut resource = state::ResourceAccount {
+        host: *host.key,
+        specs,
+        status: state::ResourceStatus::Idle,
+        reputation_score: 1000,
+        staked_flux: 0,
+        last_updated: 0, // Placeholder for timestamp
+    };
+    account_data.copy_from_slice(&resource.try_to_vec()?);
+
+    Ok(())
 }
 
-// ----------------------------------------------------------------
-// --- ACCOUNTS & CONTEXTS ---
-// ----------------------------------------------------------------
+/// Updates the specs and status of an existing resource, mainly used by the Host Worker Node.
+pub fn update_resource_status(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let host = &accounts[0];
+    let resource_account = &accounts[1];
 
-/// Context for the `register_resource` instruction.
-#[derive(Accounts)]
-#[instruction(specs: ResourceSpecs)]
-pub struct RegisterResource<'info> {
-    /// CHECK: The Host is the authority signing the transaction.
-    #[account(mut)]
-    pub host: Signer<'info>,
+    // Deserialize new_status from data
+    let new_status = state::ResourceStatus::try_from_slice(data)?;
 
-    // Creates the new Resource Account (The Resource Registry Entry)
-    #[account(
-        init,
-        payer = host,
-        space = 8 + ResourceAccount::INIT_SPACE, // Anchor automatically adds 8 bytes for account discriminator
-        seeds = [b"resource", host.key().as_ref(), specs.id.to_le_bytes().as_ref()],
-        bump
-    )]
-    pub resource_account: Account<'info, ResourceAccount>,
-    pub system_program: Program<'info, System>,
+    // Authority check
+    if !host.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Check ownership
+    let account_data = resource_account.try_borrow_data()?;
+    let resource = state::ResourceAccount::try_from_slice(&account_data)?;
+    if resource.host != *host.key {
+        return Err(ProgramError::Custom(2)); // Unauthorized
+    }
+
+    // Update status
+    let mut account_data_mut = resource_account.try_borrow_mut_data()?;
+    let mut resource_mut = state::ResourceAccount::try_from_slice(&account_data_mut)?;
+    resource_mut.status = new_status;
+    resource_mut.last_updated = 0; // Placeholder
+    account_data_mut.copy_from_slice(&resource_mut.try_to_vec()?);
+
+    Ok(())
 }
 
-/// Context for the `update_resource_status` instruction.
-#[derive(Accounts)]
-pub struct UpdateResource<'info> {
-    // The Host must sign this transaction.
-    #[account(mut)]
-    pub host: Signer<'info>,
-
-    // Ensures only the resource's owner can update the account.
-    #[account(
-        mut,
-        has_one = host, // Anchor constraint: resource_account.host must equal host.key()
-        seeds = [b"resource", host.key().as_ref(), resource_account.specs.id.to_le_bytes().as_ref()],
-        bump
-    )]
-    pub resource_account: Account<'info, ResourceAccount>,
-}
-
-// ----------------------------------------------------------------
-// --- DATA STRUCTURES ---
-// ----------------------------------------------------------------
-
-/// Main data structure for a registered compute resource.
-#[account]
-#[derive(InitSpace)]
-pub struct ResourceAccount {
-    pub host: Pubkey, // 32 bytes - The wallet of the resource provider (Host)
-    pub specs: ResourceSpecs, // Variable size based on ResourceSpecs
-    pub status: ResourceStatus, // 1 byte
-    pub reputation_score: u16, // 2 bytes - 0 to 10000
-    pub staked_flux: u64, // 8 bytes - Amount of $FLUX staked
-    pub last_updated: i64, // 8 bytes - Timestamp of last status update
-}
-
-/// Hardware specifications provided by the Host.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
-pub struct ResourceSpecs {
-    pub id: u64, // 8 bytes - A unique identifier for this specific hardware unit (Host can assign this)
-    #[max_len(20)]
-    pub gpu_model: String, // Variable: 4 + (Max 20 chars)
-    pub vram_gb: u8, // 1 byte
-    pub cpu_cores: u8, // 1 byte
-    pub compute_rating: u32, // 4 bytes - Benchmark score (Oracle fed)
-    pub price_per_hour: u64, // 8 bytes - Price in $FLUX token base units
-}
-
-/// The current state of the resource.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, InitSpace)]
-pub enum ResourceStatus {
-    Idle,      // Available and waiting for a job
-    Busy,      // Currently executing a job
-    Offline,   // Worker Node not reporting in
-    Suspended, // Slashed or temporarily banned
-}
-
-// Add error codes for the program
-#[error_code]
-pub enum FluxError {
-    #[msg("The resource ID provided is already registered by this host.")]
-    ResourceIdAlreadyExists,
-    #[msg("Invalid price or zero price provided for resource.")]
-    InvalidPrice,
-}
