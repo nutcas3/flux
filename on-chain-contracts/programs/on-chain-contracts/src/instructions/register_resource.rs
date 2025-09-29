@@ -29,7 +29,7 @@ pub fn register_resource(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult
 
     let (resource_pda, bump) = Pubkey::create_program_address(
         &[b"resource", host.key.as_ref(), specs.id.to_le_bytes().as_ref()],
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     )?;
 
     if resource_account.key != &resource_pda {
@@ -41,7 +41,7 @@ pub fn register_resource(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult
         resource_account.key,
         1000000, 
         state::ResourceAccount::SPACE as u64,
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     );
 
     let create_account_instruction = Instruction {

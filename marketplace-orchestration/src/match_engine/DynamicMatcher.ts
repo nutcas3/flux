@@ -1,4 +1,5 @@
 import { SolanaRpcService } from '../services/SolanaRpcService';
+import { OracleFeed } from '../reputation_system/OracleFeed';
 
 interface JobRequirements {
     requiredVram: number;
@@ -15,8 +16,8 @@ interface JobPayload {
 }
 
 interface ResourceListing {
-    publicKey: string; 
-    host: string; 
+    publicKey: string;
+    host: string;
     specs: {
         id: bigint;
         gpuModel: string;
@@ -37,30 +38,39 @@ interface ResourceListing {
  * 2. Price within budget
  * 3. Host reputation
  * 4. Recent activity (freshness of status updates)
+ * 5. Oracle-based reputation updates
  */
 export class DynamicMatcher {
-    constructor(private rpcService: SolanaRpcService) {}
+    constructor(private rpcService: SolanaRpcService, private oracleFeed: OracleFeed) {}
 
     /**
      * Finds the best matching host for the given job requirements.
      */
     public async findBestMatch(requirements: JobRequirements): Promise<ResourceListing | null> {
         const resources = await this.rpcService.getAllResourceListings();
-        
+
         // Filter out unavailable resources
         const availableResources = resources.filter(r => r.status === 'Idle');
         if (availableResources.length === 0) return null;
 
         // Filter by minimum requirements
-        const qualifiedResources = availableResources.filter(r => 
+        const qualifiedResources = availableResources.filter(r =>
             r.specs.vramGb >= requirements.requiredVram &&
             r.specs.computeRating >= requirements.minComputeRating &&
             this.getPricePerSecond(r.specs.pricePerHour) <= requirements.maxPricePerSecond
         );
         if (qualifiedResources.length === 0) return null;
 
+        // Update reputation scores using OracleFeed
+        const updatedResources = await Promise.all(
+            qualifiedResources.map(async (r) => {
+                const oracleData = await this.oracleFeed.fetchBenchmarkData(r.specs.gpuModel);
+                return { ...r, reputationScore: this.calculateReputationFromOracle(r, oracleData) };
+            })
+        );
+
         // Score each resource
-        const scoredResources = qualifiedResources.map(r => ({
+        const scoredResources = updatedResources.map(r => ({
             resource: r,
             score: this.calculateMatchScore(r, requirements)
         }));
@@ -72,15 +82,14 @@ export class DynamicMatcher {
 
     /**
      * Dispatches a job to the selected host.
-     * In a real system, this would interact with a job queue and host API.
      */
     public async dispatchJobToHost(host: ResourceListing, payload: JobPayload): Promise<boolean> {
         console.log(`[DISPATCH] Sending job ${payload.JobID} to host ${host.host}`);
         console.log(`[DISPATCH] Docker Image: ${payload.ImageUrl}`);
-        
+
         // MOCK: Simulate API call to host's worker node
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // In production:
         // 1. Send job details to host's API endpoint
         // 2. Wait for acknowledgment
@@ -97,7 +106,7 @@ export class DynamicMatcher {
         score += vramScore + computeScore;
 
         // Price competitiveness score (0-20 points)
-        const priceRatio = Number(this.getPricePerSecond(resource.specs.pricePerHour)) / 
+        const priceRatio = Number(this.getPricePerSecond(resource.specs.pricePerHour)) /
                           Number(requirements.maxPricePerSecond);
         score += Math.max(20 * (1 - priceRatio), 0);
 
@@ -109,6 +118,12 @@ export class DynamicMatcher {
         score += Math.max(10 - (secondsSinceUpdate / 6), 0); // Lose 1 point per 6 seconds
 
         return score;
+    }
+    private calculateReputationFromOracle(resource: ResourceListing, oracleData: any): number {
+        // Example: Adjust reputation based on oracle benchmark score
+        const baseScore = resource.reputationScore;
+        const oracleMultiplier = oracleData.benchmarkScore / 10000; // Normalize
+        return Math.min(baseScore * oracleMultiplier, 10000); // Cap at 10000
     }
 
     private getPricePerSecond(pricePerHour: bigint): bigint {
