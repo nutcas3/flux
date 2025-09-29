@@ -35,7 +35,6 @@ pub enum ResourceStatus {
     Offline,   
 }
 
-// Job-related structures
 #[derive(BorshSerialize, BorshDeserialize, Clone)]
 pub struct JobAccount {
     pub job_id: u64,
@@ -61,7 +60,6 @@ pub enum JobStatus {
     Failed,    // Failed or disputed
 }
 
-// Escrow and Payment structures
 #[derive(BorshSerialize, BorshDeserialize, Clone)]
 pub struct EscrowAccount {
     pub job_id: u64,
@@ -82,7 +80,6 @@ pub enum EscrowStatus {
     Refunded,  // Funds returned to client
 }
 
-// Governance structures
 #[derive(BorshSerialize, BorshDeserialize, Clone)]
 pub struct ProposalAccount {
     pub proposal_id: u64,
