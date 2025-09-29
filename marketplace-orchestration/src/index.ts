@@ -2,17 +2,19 @@
 
 import { SolanaRpcService } from './services/SolanaRpcService';
 import { DynamicMatcher } from './match_engine/DynamicMatcher';
+import { OracleFeed } from './reputation_system/OracleFeed';
 
 console.log("--- Flux Marketplace Orchestrator Starting ---");
 
 // Initialize core services
 const rpcService = new SolanaRpcService();
-const matcher = new DynamicMatcher(rpcService);
+const oracle = new OracleFeed();
+const matcher = new DynamicMatcher(rpcService, oracle);
 
 // MOCK: A simple function to simulate the entire job submission lifecycle
 async function simulateJobSubmission(clientPK: string) {
     console.log("\n--- Client Job Request Received ---");
-    
+
     // 1. Define Job Requirements (From Frontend API call)
     const jobRequirements = {
         requiredVram: 20,
@@ -33,8 +35,8 @@ async function simulateJobSubmission(clientPK: string) {
     const requiredAmount = 25000n; // Example: 5 hours of compute at the price
 
     const txHash = await rpcService.initiateJobEscrow(
-        clientPK, 
-        bestMatch.publicKey, 
+        clientPK,
+        bestMatch.publicKey,
         requiredAmount
     );
 
@@ -49,11 +51,11 @@ async function simulateJobSubmission(clientPK: string) {
     const isDispatched = await matcher.dispatchJobToHost(bestMatch, jobPayload);
 
     if (isDispatched) {
-        console.log(`\n--- JOB SUCCESS ---`);
+        console.log("\n--- JOB SUCCESS ---");
         console.log(`Job ID: ${jobPayload.JobID}`);
         console.log(`Assigned Host: ${bestMatch.host.substring(0, 10)}...`);
         console.log(`Escrow TX: ${txHash.substring(0, 15)}...`);
-        console.log(`-------------------`);
+        console.log("-------------------");
     } else {
         console.log("Job Dispatch Failed (Internal Error).");
     }
