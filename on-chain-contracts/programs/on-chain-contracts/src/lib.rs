@@ -15,6 +15,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 declare_id!("C9xzMFbaR39ftisYXsnbELsPpxgsMeeLW5fVH4fSVNiR");
 
 pub mod state;
+pub mod instructions;
 
 
 // Pinocchio entrypoint
@@ -23,15 +24,17 @@ entrypoint!(process_instruction);
 pub fn process_instruction(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let (instruction, rest) = data.split_first().ok_or(ProgramError::InvalidInstructionData)?;
     match instruction {
-        0 => register_resource(accounts, rest),
-        1 => update_resource_status(accounts, rest),
-        2 => start_job(accounts, rest),
-        3 => submit_job_result(accounts, rest),
-        4 => resolve_job(accounts, rest),
-        5 => deposit_escrow(accounts, rest),
-        6 => release_payment(accounts, rest),
-        7 => create_proposal(accounts, rest),
-        8 => vote_on_proposal(accounts, rest),
+        0 => instructions::register_resource(accounts, rest),
+        1 => instructions::update_resource_status(accounts, rest),
+        2 => instructions::start_job(accounts, rest),
+        3 => instructions::submit_job_result(accounts, rest),
+        4 => instructions::resolve_job(accounts, rest),
+        5 => instructions::deposit_escrow(accounts, rest),
+        6 => instructions::release_payment(accounts, rest),
+        7 => instructions::create_proposal(accounts, rest),
+        8 => instructions::vote_on_proposal(accounts, rest),
+        9 => instructions::stake_flux(accounts, rest), // New staking instruction
+        10 => instructions::unstake_flux(accounts, rest), // New unstaking instruction
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
@@ -372,6 +375,73 @@ pub fn vote_on_proposal(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult 
     proposal_data_mut.copy_from_slice(&proposal_mut.try_to_vec()?);
 
     msg!("Vote cast by {} on proposal {}", voter.key, proposal.proposal_id);
+
+    Ok(())
+}
+
+/// Stakes FLUX tokens for a host to participate in the marketplace.
+/// Accounts: [host, resource_account, token_account, token_program]
+pub fn stake_flux(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let host = &accounts[0];
+    let resource_account = &accounts[1];
+    let token_account = &accounts[2];
+    let token_program = &accounts[3];
+
+    if !host.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
+
+    // Check if host owns the resource
+    let resource_data = resource_account.try_borrow_data()?;
+    let resource = state::ResourceAccount::try_from_slice(&resource_data)?;
+    if resource.host != *host.key {
+        return Err(ProgramError::Custom(2)); // Unauthorized
+    }
+
+    // Simplified: Assume token transfer to staking pool
+    // In reality, use SPL Token CPI for staking
+    msg!("Staking {} FLUX for host {}", amount, host.key);
+
+    // Update staked amount in resource
+    let mut resource_data_mut = resource_account.try_borrow_mut_data()?;
+    let mut resource_mut = state::ResourceAccount::try_from_slice(&resource_data_mut)?;
+    resource_mut.staked_flux += amount;
+    resource_data_mut.copy_from_slice(&resource_mut.try_to_vec()?);
+
+    Ok(())
+}
+
+/// Unstakes FLUX tokens from a host's staked amount.
+/// Accounts: [host, resource_account, token_account, token_program]
+pub fn unstake_flux(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    let host = &accounts[0];
+    let resource_account = &accounts[1];
+    let token_account = &accounts[2];
+    let token_program = &accounts[3];
+
+    if !host.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
+
+    // Check ownership and sufficient stake
+    let resource_data = resource_account.try_borrow_data()?;
+    let resource = state::ResourceAccount::try_from_slice(&resource_data)?;
+    if resource.host != *host.key || resource.staked_flux < amount {
+        return Err(ProgramError::Custom(5)); // InsufficientFunds
+    }
+
+    // Simplified: Transfer tokens back
+    msg!("Unstaking {} FLUX for host {}", amount, host.key);
+
+    // Update staked amount
+    let mut resource_data_mut = resource_account.try_borrow_mut_data()?;
+    let mut resource_mut = state::ResourceAccount::try_from_slice(&resource_data_mut)?;
+    resource_mut.staked_flux -= amount;
+    resource_data_mut.copy_from_slice(&resource_mut.try_to_vec()?);
 
     Ok(())
 }
