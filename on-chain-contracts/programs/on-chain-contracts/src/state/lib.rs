@@ -28,16 +28,44 @@ pub struct ResourceSpecs {
 impl ResourceSpecs {
     pub const SPACE: usize = 8 + 4 + 20 + 1 + 1 + 4 + 8;
 }
-
 #[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
 pub enum ResourceStatus {
     Idle,      
     Busy,      
     Offline,   
-    Suspended, 
 }
 
+// Job-related structures
+#[derive(BorshSerialize, BorshDeserialize, Clone)]
+pub struct JobAccount {
+    pub job_id: u64,
+    pub client: Pubkey,
+    pub host: Pubkey,
+    pub status: JobStatus,
+    pub specs: ResourceSpecs, // Copy of the specs for the job
+    pub result_hash: [u8; 32],
+    pub deadline: i64,
+    pub payment_amount: u64,
+    pub escrow_account: Pubkey,
+}
+
+impl JobAccount {
+    pub const SPACE: usize = 8 + 32 + 32 + 1 + ResourceSpecs::SPACE + 32 + 8 + 8 + 32;
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, PartialEq)]
+pub enum JobStatus {
+    Pending,   // Waiting for host assignment
+    Active,    // In progress
+    Completed, // Finished successfully
+    Failed,    // Failed or disputed
+}
+
+// Extend error codes for jobs
 pub enum FluxError {
     ResourceIdAlreadyExists,
     InvalidPrice,
+    JobNotFound,
+    UnauthorizedHost,
+    InvalidJobStatus,
 }
