@@ -27,7 +27,7 @@ pub fn deposit_escrow(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
 
     let (escrow_pda, bump) = Pubkey::create_program_address(
         &[b"escrow", client.key.as_ref(), job_id.to_le_bytes().as_ref()],
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     )?;
 
     if escrow_account.key != &escrow_pda {

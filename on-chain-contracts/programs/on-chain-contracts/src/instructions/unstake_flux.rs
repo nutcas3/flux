@@ -32,7 +32,7 @@ pub fn unstake_flux(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
 
     let (staking_pda, bump) = Pubkey::create_program_address(
         &[b"stake", resource_account.key.as_ref()],
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     )?;
     let transfer_ix = spl_token::instruction::transfer(
         &SPL_TOKEN_PROGRAM_ID,

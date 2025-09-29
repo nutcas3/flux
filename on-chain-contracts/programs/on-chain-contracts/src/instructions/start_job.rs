@@ -28,7 +28,7 @@ pub fn start_job(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
 
     let (job_pda, bump) = Pubkey::create_program_address(
         &[b"job", client.key.as_ref(), job_id.to_le_bytes().as_ref()],
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     )?;
 
     if job_account.key != &job_pda {
@@ -40,7 +40,7 @@ pub fn start_job(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
         job_account.key,
         1000000,
         state::JobAccount::SPACE as u64,
-        &pinocchio::ID,
+        &pinocchio::program::ID,
     );
 
     let create_account_instruction = Instruction {

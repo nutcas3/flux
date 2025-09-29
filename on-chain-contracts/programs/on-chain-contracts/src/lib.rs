@@ -19,7 +19,7 @@ pub mod instructions;
 
 entrypoint!(process_instruction);
 
-pub fn process_instruction(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+pub fn process_instruction(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let (instruction, rest) = data.split_first().ok_or(ProgramError::InvalidInstructionData)?;
     match instruction {
         0 => instructions::register_resource(accounts, rest),
