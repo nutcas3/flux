@@ -13,7 +13,7 @@ interface ResourceListing {
     publicKey: string; // The PDA address of the ResourceAccount
     host: string; // The Host's wallet address
     specs: ResourceSpecs;
-    status: 'Idle' | 'Busy' | 'Offline' | 'Suspended';
+    status: 'Idle' | 'Busy' | 'Offline';
     reputationScore: number;
     lastUpdated: number;
 }
