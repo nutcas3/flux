@@ -1,10 +1,14 @@
 package solana
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"flux-worker-go/internal/types"
 )
@@ -15,6 +19,7 @@ type Agent struct {
 	HostKeypair []byte   // The private key used for signing transactions
 	ClusterURL string   // Solana RPC endpoint
 	ProgramID string     // Flux Marketplace Program ID
+	BlockradarAPIKey string // API key for Blockradar
 }
 
 // NewAgent initializes the Solana Agent by loading the host's private key.
@@ -29,12 +34,94 @@ func NewAgent(keyPath string) (*Agent, error) {
 	// We'll use a placeholder for the host's public key for display purposes.
 	mockPK := "WorkerNodeHostWalletPublicKey11111111111111111111"
 
+	apiKey := os.Getenv("BLOCKRADAR_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("BLOCKRADAR_API_KEY not set")
+	}
+
 	return &Agent{
 		HostPublicKey: mockPK,
-		HostKeypair:   keypair, // In production, never store this in plain text
-		ClusterURL:    "https://api.devnet.solana.com",
-		ProgramID:     "FLUXc5wA22u74Y64e1YjP1c137452d371d374f3747f4",
+		HostKeypair: keypair,
+		ClusterURL: "https://api.mainnet-beta.solana.com", // Example
+		ProgramID: "C9xzMFbaR39ftisYXsnbELsPpxgsMeeLW5fVH4fSVNiR", // Your program ID
+		BlockradarAPIKey: apiKey,
 	}, nil
+}
+
+// ProcessStablecoinPayment initiates a stablecoin payment via Blockradar APIs.
+func (a *Agent) ProcessStablecoinPayment(jobID string, amount float64, recipientAddress string, stablecoin string) error {
+	// Prepare request payload
+	payload := map[string]interface{}{
+		"job_id": jobID,
+		"amount": amount,
+		"recipient": recipientAddress,
+		"stablecoin": stablecoin, // e.g., "USDC", "USDT"
+		"sender": a.HostPublicKey,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Make POST request to Blockradar payment endpoint
+	req, err := http.NewRequest("POST", "https://api.blockradar.com/v1/payments", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer " + a.BlockradarAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("payment request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Blockradar API error: %s", string(body))
+	}
+
+	// Parse response (e.g., transaction ID)
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	log.Printf("Payment initiated: %v", response)
+	// Optionally, store transaction ID for status checks
+	return nil
+}
+
+// CheckPaymentStatus queries the status of a stablecoin payment.
+func (a *Agent) CheckPaymentStatus(transactionID string) (string, error) {
+	url := fmt.Sprintf("https://api.blockradar.com/v1/payments/%s", transactionID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer " + a.BlockradarAPIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("status check failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	status, ok := response["status"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid response format")
+	}
+
+	return status, nil
 }
 
 // RegisterResource sends a signed transaction to the Solana program to create a ResourceAccount.
