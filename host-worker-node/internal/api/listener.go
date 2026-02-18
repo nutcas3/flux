@@ -53,7 +53,7 @@ func (l *Listener) Start() error {
 	}
 
 	log.Printf("API listener starting on %s", l.port)
-	
+
 	go func() {
 		if err := l.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("API listener error: %v", err)
@@ -148,7 +148,7 @@ func (l *Listener) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"running":  l.isRunning,
 		"executor": l.executor != nil,
 		"agent":    l.agent != nil,
