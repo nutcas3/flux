@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "programs/*"
+    "programs/flux-marketplace"
 ]
 resolver = "2"
 

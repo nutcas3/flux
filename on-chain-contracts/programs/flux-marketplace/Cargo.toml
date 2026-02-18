@@ -1,0 +1,27 @@
+[package]
+name = "flux-marketplace"
+version = "0.2.0"
+description = "Flux DePIN Marketplace - Decentralized GPU Compute Network"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "flux_marketplace"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = "0.32.1"
+anchor-spl = "0.32.1"
+borsh = "1.5.7"
+solana-program = "2.1.0"
+spl-token = "6.0.0"
+spl-associated-token-account = "5.0.1"
+mpl-core = "0.8.0"
+sha3 = "0.10"
