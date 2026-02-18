@@ -112,6 +112,35 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* FLUX Color Palette */
+:root {
+  /* Primary Colors */
+  --color-white: #FFFFFF;
+  --color-champagne: #E8D1AB;
+  --color-daring: #DC694F;
+  --color-befitting: #994D6F;
+  --color-magentleman: #A926B6;
+  --color-ebizome-purple: #6B2850;
+  --color-seal-brown: #331018;
+  
+  /* Semantic Colors */
+  --color-flux-background: var(--color-white);
+  --color-flux-text-primary: var(--color-seal-brown);
+  --color-flux-text-secondary: var(--color-befitting);
+  --color-flux-accent-primary: var(--color-daring);
+  --color-flux-accent-secondary: var(--color-champagne);
+  --color-flux-accent-tech: var(--color-magentleman);
+  --color-flux-surface: var(--color-ebizome-purple);
+  
+  /* Component Colors */
+  --color-flux-button-primary: var(--color-daring);
+  --color-flux-button-secondary: var(--color-champagne);
+  --color-flux-border: var(--color-champagne);
+  --color-flux-nav: var(--color-seal-brown);
+  --color-flux-card-bg: var(--color-white);
+  --color-flux-alert: var(--color-magentleman);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
