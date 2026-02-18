@@ -38,7 +38,7 @@ func NewGPUAttestor() (*GPUAttestor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect GPU: %w", err)
 	}
-	
+
 	return &GPUAttestor{
 		gpuInfo: info,
 	}, nil
@@ -48,17 +48,17 @@ func DetectNvidiaGPU() (*GPUInfo, error) {
 	cmd := exec.Command("nvidia-smi",
 		"--query-gpu=name,memory.total,pci.bus_id,uuid,driver_version,compute_cap",
 		"--format=csv,noheader")
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("nvidia-smi failed: %w", err)
 	}
-	
+
 	fields := strings.Split(strings.TrimSpace(string(output)), ",")
 	if len(fields) < 6 {
 		return nil, fmt.Errorf("unexpected nvidia-smi output")
 	}
-	
+
 	info := &GPUInfo{
 		Model:             strings.TrimSpace(fields[0]),
 		VRAM:              parseVRAM(fields[1]),
@@ -67,9 +67,9 @@ func DetectNvidiaGPU() (*GPUInfo, error) {
 		DriverVersion:     strings.TrimSpace(fields[4]),
 		ComputeCapability: strings.TrimSpace(fields[5]),
 	}
-	
+
 	info.DeviceFingerprint = generateFingerprint(info)
-	
+
 	return info, nil
 }
 
@@ -79,7 +79,7 @@ func generateFingerprint(info *GPUInfo) [32]byte {
 		info.UUID,
 		info.PCIeID,
 		info.VRAM)
-	
+
 	return sha256.Sum256([]byte(data))
 }
 
@@ -93,18 +93,18 @@ func (a *GPUAttestor) GetDeviceFingerprint() [32]byte {
 
 func (a *GPUAttestor) SolveChallenge(challengeSeed [32]byte, difficulty uint32) (*AttestationProof, error) {
 	startTime := time.Now()
-	
+
 	var nonce uint64
 	for {
 		hash := computeHash(challengeSeed, nonce)
 		if countLeadingZeros(hash) >= int(difficulty) {
 			executionTime := uint64(time.Since(startTime).Milliseconds())
-			
+
 			metrics, err := getCurrentGPUMetrics()
 			if err != nil {
 				return nil, fmt.Errorf("failed to get GPU metrics: %w", err)
 			}
-			
+
 			return &AttestationProof{
 				Nonce:           nonce,
 				ResultHash:      hash,
@@ -116,7 +116,7 @@ func (a *GPUAttestor) SolveChallenge(challengeSeed [32]byte, difficulty uint32) 
 			}, nil
 		}
 		nonce++
-		
+
 		if nonce%1000000 == 0 && time.Since(startTime) > 30*time.Second {
 			return nil, fmt.Errorf("challenge timeout after %d iterations", nonce)
 		}
@@ -149,43 +149,43 @@ func countLeadingZeros(hash [32]byte) int {
 
 func uint64ToBytes(n uint64) []byte {
 	b := make([]byte, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		b[i] = byte(n >> (i * 8))
 	}
 	return b
 }
 
 type GPUMetrics struct {
-	Utilization  uint8
-	MemoryUsed   uint32
-	Temperature  uint8
-	PowerDraw    uint16
-	FanSpeed     uint8
-	ClockSpeed   uint32
+	Utilization uint8
+	MemoryUsed  uint32
+	Temperature uint8
+	PowerDraw   uint16
+	FanSpeed    uint8
+	ClockSpeed  uint32
 }
 
 func getCurrentGPUMetrics() (*GPUMetrics, error) {
 	cmd := exec.Command("nvidia-smi",
 		"--query-gpu=utilization.gpu,memory.used,temperature.gpu,power.draw,fan.speed,clocks.current.graphics",
 		"--format=csv,noheader,nounits")
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("nvidia-smi metrics failed: %w", err)
 	}
-	
+
 	fields := strings.Split(strings.TrimSpace(string(output)), ",")
 	if len(fields) < 6 {
 		return nil, fmt.Errorf("unexpected nvidia-smi metrics output")
 	}
-	
+
 	return &GPUMetrics{
-		Utilization:  parseUint8(fields[0]),
-		MemoryUsed:   parseUint32(fields[1]),
-		Temperature:  parseUint8(fields[2]),
-		PowerDraw:    parseUint16(fields[3]),
-		FanSpeed:     parseUint8(fields[4]),
-		ClockSpeed:   parseUint32(fields[5]),
+		Utilization: parseUint8(fields[0]),
+		MemoryUsed:  parseUint32(fields[1]),
+		Temperature: parseUint8(fields[2]),
+		PowerDraw:   parseUint16(fields[3]),
+		FanSpeed:    parseUint8(fields[4]),
+		ClockSpeed:  parseUint32(fields[5]),
 	}, nil
 }
 

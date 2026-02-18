@@ -48,10 +48,10 @@ func NewBenchmarker(attestor *GPUAttestor) *Benchmarker {
 
 func (b *Benchmarker) RunBenchmark(challenge *BenchmarkChallenge) (*BenchmarkResult, error) {
 	startTime := time.Now()
-	
+
 	var resultHash [32]byte
 	var err error
-	
+
 	switch challenge.ChallengeType {
 	case MatrixMultiplication:
 		resultHash, err = b.runMatrixBenchmark(challenge.InputData)
@@ -66,22 +66,22 @@ func (b *Benchmarker) RunBenchmark(challenge *BenchmarkChallenge) (*BenchmarkRes
 	default:
 		return nil, fmt.Errorf("unknown challenge type: %d", challenge.ChallengeType)
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("benchmark failed: %w", err)
 	}
-	
+
 	executionTime := uint64(time.Since(startTime).Milliseconds())
-	
+
 	if executionTime > challenge.MaxTimeMs {
 		return nil, fmt.Errorf("execution time %dms exceeded maximum %dms", executionTime, challenge.MaxTimeMs)
 	}
-	
+
 	metrics, err := getCurrentGPUMetrics()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GPU metrics: %w", err)
 	}
-	
+
 	return &BenchmarkResult{
 		ChallengeID:     challenge.ChallengeID,
 		ResultHash:      resultHash,
@@ -98,11 +98,11 @@ func (b *Benchmarker) runMatrixBenchmark(inputData []byte) ([32]byte, error) {
 	if len(inputData) > 0 {
 		size = int(inputData[0]) * 4
 	}
-	
+
 	matrixA := make([][]float64, size)
 	matrixB := make([][]float64, size)
 	result := make([][]float64, size)
-	
+
 	for i := 0; i < size; i++ {
 		matrixA[i] = make([]float64, size)
 		matrixB[i] = make([]float64, size)
@@ -112,7 +112,7 @@ func (b *Benchmarker) runMatrixBenchmark(inputData []byte) ([32]byte, error) {
 			matrixB[i][j] = rand.Float64()
 		}
 	}
-	
+
 	for i := 0; i < size; i++ {
 		for j := 0; j < size; j++ {
 			sum := 0.0
@@ -122,14 +122,14 @@ func (b *Benchmarker) runMatrixBenchmark(inputData []byte) ([32]byte, error) {
 			result[i][j] = sum
 		}
 	}
-	
+
 	hasher := sha256.New()
 	for i := 0; i < size; i++ {
 		for j := 0; j < size; j++ {
-			hasher.Write([]byte(fmt.Sprintf("%f", result[i][j])))
+			hasher.Write(fmt.Appendf(nil, "%f", result[i][j]))
 		}
 	}
-	
+
 	var hash [32]byte
 	copy(hash[:], hasher.Sum(nil))
 	return hash, nil
@@ -140,16 +140,16 @@ func (b *Benchmarker) runHashBenchmark(inputData []byte) ([32]byte, error) {
 	if len(inputData) > 0 {
 		iterations = int(inputData[0]) * 10000
 	}
-	
+
 	var hash [32]byte
 	data := make([]byte, 64)
 	copy(data, inputData)
-	
+
 	for i := 0; i < iterations; i++ {
 		hash = sha256.Sum256(data)
 		copy(data, hash[:])
 	}
-	
+
 	return hash, nil
 }
 
@@ -158,16 +158,16 @@ func (b *Benchmarker) runFloatBenchmark(inputData []byte) ([32]byte, error) {
 	if len(inputData) > 0 {
 		iterations = int(inputData[0]) * 100000
 	}
-	
+
 	result := 0.0
 	for i := 0; i < iterations; i++ {
 		result += math.Sin(float64(i)) * math.Cos(float64(i))
 		result = math.Sqrt(math.Abs(result))
 	}
-	
+
 	hasher := sha256.New()
-	hasher.Write([]byte(fmt.Sprintf("%f", result)))
-	
+	hasher.Write(fmt.Appendf(nil, "%f", result))
+
 	var hash [32]byte
 	copy(hash[:], hasher.Sum(nil))
 	return hash, nil
@@ -178,20 +178,20 @@ func (b *Benchmarker) runMemoryBenchmark(inputData []byte) ([32]byte, error) {
 	if len(inputData) > 0 {
 		size = int(inputData[0]) * 1024 * 1024
 	}
-	
+
 	data := make([]byte, size)
 	for i := range data {
 		data[i] = byte(i % 256)
 	}
-	
+
 	sum := uint64(0)
 	for i := range data {
 		sum += uint64(data[i])
 	}
-	
+
 	hasher := sha256.New()
-	hasher.Write([]byte(fmt.Sprintf("%d", sum)))
-	
+	hasher.Write(fmt.Appendf(nil, "%d", sum))
+
 	var hash [32]byte
 	copy(hash[:], hasher.Sum(nil))
 	return hash, nil
@@ -202,51 +202,51 @@ func (b *Benchmarker) runTensorBenchmark(inputData []byte) ([32]byte, error) {
 	inputSize := 784
 	hiddenSize := 256
 	outputSize := 10
-	
+
 	if len(inputData) > 0 {
 		batchSize = int(inputData[0])
 	}
-	
+
 	input := make([][]float64, batchSize)
 	for i := 0; i < batchSize; i++ {
 		input[i] = make([]float64, inputSize)
-		for j := 0; j < inputSize; j++ {
+		for j := range inputSize {
 			input[i][j] = rand.Float64()
 		}
 	}
-	
+
 	w1 := make([][]float64, inputSize)
-	for i := 0; i < inputSize; i++ {
+	for i := range inputSize {
 		w1[i] = make([]float64, hiddenSize)
-		for j := 0; j < hiddenSize; j++ {
+		for j := range hiddenSize {
 			w1[i][j] = rand.Float64()
 		}
 	}
-	
+
 	w2 := make([][]float64, hiddenSize)
-	for i := 0; i < hiddenSize; i++ {
+	for i := range hiddenSize {
 		w2[i] = make([]float64, outputSize)
-		for j := 0; j < outputSize; j++ {
+		for j := range outputSize {
 			w2[i][j] = rand.Float64()
 		}
 	}
-	
+
 	hidden := matmul(input, w1)
 	for i := range hidden {
 		for j := range hidden[i] {
 			hidden[i][j] = math.Max(0, hidden[i][j])
 		}
 	}
-	
+
 	output := matmul(hidden, w2)
-	
+
 	hasher := sha256.New()
 	for i := range output {
 		for j := range output[i] {
-			hasher.Write([]byte(fmt.Sprintf("%f", output[i][j])))
+			hasher.Write(fmt.Appendf(nil, "%f", output[i][j]))
 		}
 	}
-	
+
 	var hash [32]byte
 	copy(hash[:], hasher.Sum(nil))
 	return hash, nil
@@ -256,18 +256,18 @@ func matmul(a, b [][]float64) [][]float64 {
 	rows := len(a)
 	cols := len(b[0])
 	inner := len(b)
-	
+
 	result := make([][]float64, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		result[i] = make([]float64, cols)
-		for j := 0; j < cols; j++ {
+		for j := range cols {
 			sum := 0.0
-			for k := 0; k < inner; k++ {
+			for k := range inner {
 				sum += a[i][k] * b[k][j]
 			}
 			result[i][j] = sum
 		}
 	}
-	
+
 	return result
 }

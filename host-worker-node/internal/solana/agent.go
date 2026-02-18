@@ -15,10 +15,10 @@ import (
 
 // Agent handles all communication and transaction signing with the Solana network.
 type Agent struct {
-	HostPublicKey string // The host's wallet address (Public Key)
-	HostKeypair []byte   // The private key used for signing transactions
-	ClusterURL string   // Solana RPC endpoint
-	ProgramID string     // Flux Marketplace Program ID
+	HostPublicKey    string // The host's wallet address (Public Key)
+	HostKeypair      []byte // The private key used for signing transactions
+	ClusterURL       string // Solana RPC endpoint
+	ProgramID        string // Flux Marketplace Program ID
 	BlockradarAPIKey string // API key for Blockradar
 }
 
@@ -40,10 +40,10 @@ func NewAgent(keyPath string) (*Agent, error) {
 	}
 
 	return &Agent{
-		HostPublicKey: mockPK,
-		HostKeypair: keypair,
-		ClusterURL: "https://api.mainnet-beta.solana.com", // Example
-		ProgramID: "C9xzMFbaR39ftisYXsnbELsPpxgsMeeLW5fVH4fSVNiR", // Your program ID
+		HostPublicKey:    mockPK,
+		HostKeypair:      keypair,
+		ClusterURL:       "https://api.mainnet-beta.solana.com",          // Example
+		ProgramID:        "C9xzMFbaR39ftisYXsnbELsPpxgsMeeLW5fVH4fSVNiR", // Your program ID
 		BlockradarAPIKey: apiKey,
 	}, nil
 }
@@ -51,12 +51,12 @@ func NewAgent(keyPath string) (*Agent, error) {
 // ProcessStablecoinPayment initiates a stablecoin payment via Blockradar APIs.
 func (a *Agent) ProcessStablecoinPayment(jobID string, amount float64, recipientAddress string, stablecoin string) error {
 	// Prepare request payload
-	payload := map[string]interface{}{
-		"job_id": jobID,
-		"amount": amount,
-		"recipient": recipientAddress,
+	payload := map[string]any{
+		"job_id":     jobID,
+		"amount":     amount,
+		"recipient":  recipientAddress,
 		"stablecoin": stablecoin, // e.g., "USDC", "USDT"
-		"sender": a.HostPublicKey,
+		"sender":     a.HostPublicKey,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -69,7 +69,7 @@ func (a *Agent) ProcessStablecoinPayment(jobID string, amount float64, recipient
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer " + a.BlockradarAPIKey)
+	req.Header.Set("Authorization", "Bearer "+a.BlockradarAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -85,7 +85,7 @@ func (a *Agent) ProcessStablecoinPayment(jobID string, amount float64, recipient
 	}
 
 	// Parse response (e.g., transaction ID)
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -102,7 +102,7 @@ func (a *Agent) CheckPaymentStatus(transactionID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer " + a.BlockradarAPIKey)
+	req.Header.Set("Authorization", "Bearer "+a.BlockradarAPIKey)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -111,7 +111,7 @@ func (a *Agent) CheckPaymentStatus(transactionID string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -127,21 +127,21 @@ func (a *Agent) CheckPaymentStatus(transactionID string) (string, error) {
 // RegisterResource sends a signed transaction to the Solana program to create a ResourceAccount.
 func (a *Agent) RegisterResource(specs types.ResourceSpecs) error {
 	log.Printf("--- Submitting Resource Registration TX ---")
-	
+
 	// This function requires complex steps:
 	// 1. Finding the Program Derived Address (PDA) for the ResourceAccount.
 	// 2. Serializing the 'register_resource' instruction data (including Anchor discriminator and specs).
 	// 3. Building a full Solana transaction with the necessary accounts (Host, Resource PDA, SystemProgram).
 	// 4. Signing the transaction with a.HostKeypair.
 	// 5. Sending the transaction via RPC to a.ClusterURL.
-	
+
 	// MOCK IMPLEMENTATION: We simulate the success of the RPC call.
-	
+
 	// Example of the data structure that would be serialized for the instruction:
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"instruction": "register_resource",
-		"host": a.HostPublicKey,
-		"specs": specs,
+		"host":        a.HostPublicKey,
+		"specs":       specs,
 	}
 	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
 
@@ -157,7 +157,7 @@ func (a *Agent) RegisterResource(specs types.ResourceSpecs) error {
 func (a *Agent) UpdateResourceStatus(status types.ResourceStatus) error {
 	// This function would use the 'update_resource_status' instruction.
 	// It is crucial for heartbeats and responding to job assignments.
-	
+
 	// MOCK IMPLEMENTATION: Simulate success.
 	fmt.Printf("Updating status to %s via Solana RPC at %s... (MOCK OK)\n", types.StatusToString(status), a.ClusterURL)
 	return nil
@@ -167,7 +167,7 @@ func (a *Agent) UpdateResourceStatus(status types.ResourceStatus) error {
 func (a *Agent) SubmitJobResult(jobID string, resultHash [32]byte) error {
 	// This function would use the 'submit_job_result' instruction.
 	// It submits the proof-of-work hash after job completion.
-	
+
 	// MOCK IMPLEMENTATION: Simulate success.
 	log.Printf("Submitting job result for JobID=%s, Hash=%x... (MOCK OK)", jobID, resultHash[:8])
 	return nil

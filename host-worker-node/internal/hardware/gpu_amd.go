@@ -38,8 +38,8 @@ func detectAMDVRAM() uint8 {
 	}
 
 	// Parse VRAM from output
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(output, "\n")
+	for line := range lines {
 		if strings.Contains(line, "Total Memory") {
 			// Extract memory size (usually in MB)
 			parts := strings.Fields(line)
@@ -75,8 +75,8 @@ func getAMDUtilization() int {
 	lines := strings.SplitSeq(output, "\n")
 	for line := range lines {
 		if strings.Contains(line, "GPU use") {
-			parts := strings.Fields(line)
-			for _, part := range parts {
+			parts := strings.FieldsSeq(line)
+			for part := range parts {
 				if strings.Contains(part, "%") {
 					util := parseInt(strings.TrimSuffix(part, "%"))
 					return util
@@ -96,11 +96,11 @@ func getAMDTemperature() int {
 	}
 
 	// Parse temperature from output
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(output, "\n")
+	for line := range lines {
 		if strings.Contains(line, "Temperature") {
-			parts := strings.Fields(line)
-			for _, part := range parts {
+			parts := strings.FieldsSeq(line)
+			for part := range parts {
 				if strings.Contains(part, "C") || strings.Contains(part, "°") {
 					temp := parseInt(strings.TrimSuffix(strings.TrimSuffix(part, "C"), "°"))
 					return temp
@@ -120,11 +120,11 @@ func getAMDPowerUsage() int {
 	}
 
 	// Parse power from output
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(output, "\n")
+	for line := range lines {
 		if strings.Contains(line, "Average Graphics Package Power") {
-			parts := strings.Fields(line)
-			for _, part := range parts {
+			parts := strings.FieldsSeq(line)
+			for part := range parts {
 				if strings.Contains(part, "W") {
 					power := parseInt(strings.TrimSuffix(part, "W"))
 					return power
